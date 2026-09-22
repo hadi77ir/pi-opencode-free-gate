@@ -56,14 +56,13 @@ function hasTool(tools: unknown, names: string[]): boolean {
   return false;
 }
 
-function isFreeZenProvider(ctx?: { model?: { provider?: unknown; baseUrl?: unknown } }): boolean {
+function isOpenCodeZenProvider(ctx?: { model?: { provider?: unknown; baseUrl?: unknown } }): boolean {
   const provider = ctx?.model?.provider;
-  if (provider === "opencode") return true;
-  // Host-based fallback for custom model entries on the free Zen endpoint.
-  if (provider !== "opencode-go" && typeof ctx?.model?.baseUrl === "string") {
+  if (provider === "opencode" || provider === "opencode-go") return true;
+  // Host-based fallback for custom model entries on opencode.ai Zen endpoints.
+  if (typeof ctx?.model?.baseUrl === "string") {
     try {
-      const url = new URL(ctx.model.baseUrl);
-      return url.hostname === "opencode.ai" && !url.pathname.includes("/go");
+      return new URL(ctx.model.baseUrl).hostname === "opencode.ai";
     } catch {
       return false;
     }
@@ -90,10 +89,10 @@ export default function (pi: {
       ctx?: { model?: { provider?: unknown; baseUrl?: unknown } },
     ) => {
       const headers = event.headers;
-      // Free-tier Zen gate only. Never touch opencode-go or other providers:
-      // stomping Authorization here overrides the real apiKey (OpenAI merges
-      // defaultHeaders last) and yields "Missing API key".
-      if (!headers || !isFreeZenProvider(ctx)) return;
+      // OpenCode Zen gate for both `opencode` and `opencode-go`. Never set
+      // Authorization: OpenAI merges defaultHeaders last, so writing it would
+      // override the real apiKey and yield "Missing API key" on zen/go.
+      if (!headers || !isOpenCodeZenProvider(ctx)) return;
 
       const session = piSessionId
         ? mapSessionId(piSessionId)
@@ -128,7 +127,7 @@ export default function (pi: {
     ) => {
       const payload = event?.payload;
       if (!payload || typeof payload !== "object") return undefined;
-      if (!isFreeZenProvider(ctx)) return undefined;
+      if (!isOpenCodeZenProvider(ctx)) return undefined;
 
       // Gate requires a shell-type tool AND read in body.tools.
       if (!hasTool(payload.tools, ["bash", "shell"]) || !hasTool(payload.tools, ["read"])) {

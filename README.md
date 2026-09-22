@@ -18,7 +18,7 @@ The Zen gate (`POST /zen/v1/chat/completions`) rejects anonymous clients unless:
 | `stream` | varies | defaults to `true` |
 | `Authorization` | from stored key | **never touched** — free tier uses `auth.json` key `public` |
 
-Also injects `x-opencode-client`, `x-opencode-project`, and a fresh `x-opencode-request` id, and strips any leftover pi session headers. Patches apply only to the free-tier `opencode` provider — `opencode-go` (paid, real API key) is left untouched so its `Authorization` header is never overwritten.
+Also injects `x-opencode-client`, `x-opencode-project`, and a fresh `x-opencode-request` id, and strips any leftover pi session headers. Patches apply to both `opencode` and `opencode-go` (and any custom model on `opencode.ai`); `Authorization` is never written so each provider’s default/stored API key goes through unchanged.
 
 The session id is a deterministic SHA-256 mapping of the pi session id (`opencode-free:<session>` → first 6 bytes hex + 14 base62), so consecutive turns keep affinity without colliding across sessions.
 
@@ -64,7 +64,7 @@ No API key required for free models — set `auth.json` so pi has *a* key to sen
 
 Do not set a real `OPENCODE_API_KEY` on free-tier models unless you intend to use paid Zen; this extension never rewrites `Authorization`.
 
-For `opencode-go` (paid), store your real key under `opencode-go` — this extension does not patch that provider.
+For `opencode-go`, store your real key under `opencode-go` (or set `OPENCODE_API_KEY`) — the gate patches headers/body but never rewrites `Authorization`, so your key is sent as-is.
 
 ## Usage
 
@@ -95,7 +95,7 @@ Capture real OpenCode traffic with a MITM proxy and diff against pi's request. B
 4. **401** `Model  is not supported` if `payload.model` is missing — `before_provider_request` must mutate/return `event.payload`, not the event wrapper
 5. **401** `Missing API key` on `zen/go` if `Authorization` is forced to `Bearer public` — `defaultHeaders` override the real `apiKey`; never set `Authorization` in this extension
 
-Only `user-agent` / `x-opencode-session` / body `tools` / `stream` are gate-checked; Authorization and the other `x-opencode-*` values are set for realism/forward-compat on free `opencode` only.
+Only `user-agent` / `x-opencode-session` / body `tools` / `stream` are gate-checked. `Authorization` is never set; the other `x-opencode-*` values are set for realism/forward-compat on both `opencode` and `opencode-go`.
 
 ## License
 
