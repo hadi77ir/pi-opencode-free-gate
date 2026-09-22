@@ -67,7 +67,7 @@ export default function (pi: {
     setHeader(headers, "x-opencode-client", "cli");
     setHeader(headers, "x-opencode-project", "global");
     setHeader(headers, "x-opencode-request", requestId());
-    setHeader(headers, "Authorization", "Bearer public");
+    //setHeader(headers, "Authorization", "Bearer public");
 
     // Clear any leftover pi UUID session headers
     for (const k of Object.keys(headers)) {
