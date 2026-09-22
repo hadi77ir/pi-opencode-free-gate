@@ -39,8 +39,34 @@ function setHeader(headers: Record<string, string | null | undefined>, key: stri
 function hasTool(tools: unknown, names: string[]): boolean {
   if (!Array.isArray(tools)) return false;
   for (const tool of tools) {
-    const name = typeof tool === "string" ? tool : (tool as { name?: unknown })?.name;
-    if (typeof name === "string" && names.includes(name)) return true;
+    if (typeof tool === "string") {
+      if (names.includes(tool)) return true;
+      continue;
+    }
+    if (!tool || typeof tool !== "object") continue;
+    const t = tool as { name?: unknown; function?: { name?: unknown } };
+    const name =
+      typeof t.name === "string"
+        ? t.name
+        : typeof t.function?.name === "string"
+          ? t.function.name
+          : undefined;
+    if (name && names.includes(name)) return true;
+  }
+  return false;
+}
+
+function isFreeZenProvider(ctx?: { model?: { provider?: unknown; baseUrl?: unknown } }): boolean {
+  const provider = ctx?.model?.provider;
+  if (provider === "opencode") return true;
+  // Host-based fallback for custom model entries on the free Zen endpoint.
+  if (provider !== "opencode-go" && typeof ctx?.model?.baseUrl === "string") {
+    try {
+      const url = new URL(ctx.model.baseUrl);
+      return url.hostname === "opencode.ai" && !url.pathname.includes("/go");
+    } catch {
+      return false;
+    }
   }
   return false;
 }
@@ -57,38 +83,53 @@ export default function (pi: {
   pi.on("session_start", remember);
   pi.on("before_agent_start", remember);
 
-  pi.on("before_provider_headers", (event: { headers: Record<string, string | null | undefined> }) => {
-    const headers = event.headers;
-    if (!headers) return;
+  pi.on(
+    "before_provider_headers",
+    (
+      event: { headers: Record<string, string | null | undefined> },
+      ctx?: { model?: { provider?: unknown; baseUrl?: unknown } },
+    ) => {
+      const headers = event.headers;
+      // Free-tier Zen gate only. Never touch opencode-go or other providers:
+      // stomping Authorization here overrides the real apiKey (OpenAI merges
+      // defaultHeaders last) and yields "Missing API key".
+      if (!headers || !isFreeZenProvider(ctx)) return;
 
-    const session = piSessionId ? mapSessionId(piSessionId) : mapSessionId(randomBytes(16).toString("hex"));
-    setHeader(headers, "User-Agent", OPENCODE_UA);
-    setHeader(headers, "x-opencode-session", session);
-    setHeader(headers, "x-opencode-client", "cli");
-    setHeader(headers, "x-opencode-project", "global");
-    setHeader(headers, "x-opencode-request", requestId());
-    //setHeader(headers, "Authorization", "Bearer public");
+      const session = piSessionId
+        ? mapSessionId(piSessionId)
+        : mapSessionId(randomBytes(16).toString("hex"));
+      setHeader(headers, "User-Agent", OPENCODE_UA);
+      setHeader(headers, "x-opencode-session", session);
+      setHeader(headers, "x-opencode-client", "cli");
+      setHeader(headers, "x-opencode-project", "global");
+      setHeader(headers, "x-opencode-request", requestId());
 
-    // Clear any leftover pi UUID session headers
-    for (const k of Object.keys(headers)) {
-      if (k.toLowerCase() === "x-session-id" || k.toLowerCase() === "session_id") {
-        delete headers[k];
+      // Clear any leftover pi UUID session headers
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === "x-session-id" || k.toLowerCase() === "session_id") {
+          delete headers[k];
+        }
       }
-    }
-  });
+    },
+  );
 
   pi.on(
     "before_provider_request",
-    (event: {
-      type: string;
-      payload?: {
-        tools?: unknown;
-        stream?: unknown;
-        [k: string]: unknown;
-      };
-    }) => {
+    (
+      event: {
+        type: string;
+        payload?: {
+          tools?: unknown;
+          stream?: unknown;
+          [k: string]: unknown;
+        };
+      },
+      ctx?: { model?: { provider?: unknown; baseUrl?: unknown } },
+    ) => {
       const payload = event?.payload;
       if (!payload || typeof payload !== "object") return undefined;
+      if (!isFreeZenProvider(ctx)) return undefined;
+
       // Gate requires a shell-type tool AND read in body.tools.
       if (!hasTool(payload.tools, ["bash", "shell"]) || !hasTool(payload.tools, ["read"])) {
         const tools = Array.isArray(payload.tools) ? [...payload.tools] : [];

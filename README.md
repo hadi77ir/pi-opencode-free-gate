@@ -16,9 +16,9 @@ The Zen gate (`POST /zen/v1/chat/completions`) rejects anonymous clients unless:
 | `x-opencode-session` | UUID / pi session | `ses_` + 12 hex + 14 base62 (stable per session) |
 | `tools` in body | optional / incomplete | always includes a shell tool **and** `read` |
 | `stream` | varies | defaults to `true` |
-| `Authorization` | may be missing | `Bearer public` (anonymous) |
+| `Authorization` | from stored key | **never touched** — free tier uses `auth.json` key `public` |
 
-Also injects `x-opencode-client`, `x-opencode-project`, and a fresh `x-opencode-request` id, and strips any leftover pi session headers.
+Also injects `x-opencode-client`, `x-opencode-project`, and a fresh `x-opencode-request` id, and strips any leftover pi session headers. Patches apply only to the free-tier `opencode` provider — `opencode-go` (paid, real API key) is left untouched so its `Authorization` header is never overwritten.
 
 The session id is a deterministic SHA-256 mapping of the pi session id (`opencode-free:<session>` → first 6 bytes hex + 14 base62), so consecutive turns keep affinity without colliding across sessions.
 
@@ -56,7 +56,15 @@ Make an OpenCode free model the default in `~/.pi/agent/settings.json`:
 }
 ```
 
-No API key required. `auth.json` may contain `{"opencode": {"type": "api_key", "key": "public"}}` if pi prompts for credentials.
+No API key required for free models — set `auth.json` so pi has *a* key to send:
+
+```json
+{ "opencode": { "type": "api_key", "key": "public" } }
+```
+
+Do not set a real `OPENCODE_API_KEY` on free-tier models unless you intend to use paid Zen; this extension never rewrites `Authorization`.
+
+For `opencode-go` (paid), store your real key under `opencode-go` — this extension does not patch that provider.
 
 ## Usage
 
@@ -83,10 +91,11 @@ Capture real OpenCode traffic with a MITM proxy and diff against pi's request. B
 
 1. **403** until `User-Agent` matches `opencode/<semver>` (≥ 1.17.0)
 2. **403** until `x-opencode-session` matches `ses_[0-9a-f]{12}[0-9A-Za-z]{14}`
-3. **403** until body `tools` contains a shell-type tool **and** `read`
+3. **403** until body `tools` contains a shell-type tool **and** `read` (match OpenAI `{function:{name}}` shape — string-only checks miss them and append duplicates; zen/go rejects duplicates with 400)
 4. **401** `Model  is not supported` if `payload.model` is missing — `before_provider_request` must mutate/return `event.payload`, not the event wrapper
+5. **401** `Missing API key` on `zen/go` if `Authorization` is forced to `Bearer public` — `defaultHeaders` override the real `apiKey`; never set `Authorization` in this extension
 
-`Authorization` / `x-opencode-client` / `x-opencode-project` / `x-opencode-request` values are not gate-checked today; they are set for realism and forward compatibility.
+Only `user-agent` / `x-opencode-session` / body `tools` / `stream` are gate-checked; Authorization and the other `x-opencode-*` values are set for realism/forward-compat on free `opencode` only.
 
 ## License
 
