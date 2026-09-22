@@ -1,0 +1,39 @@
+{
+  "name": "pi-opencode-free-gate",
+  "version": "0.1.0",
+  "description": "OpenCode free-tier gate patcher for the pi coding agent — spoofs the opencode User-Agent, session, and tools headers required by the Zen anonymous endpoint.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "opencode",
+    "zen",
+    "free-tier",
+    "coding-agent"
+  ],
+  "license": "MIT",
+  "author": "Mohammad Hadi Hosseinpour",
+  "type": "module",
+  "files": [
+    "src/**/*.ts"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hadi77ir/pi-opencode-free-gate.git"
+  }
+}
